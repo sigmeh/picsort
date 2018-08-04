@@ -1,0 +1,134 @@
+#!/usr/bin/env python
+''' picsort 
+	A python utility for generating image thumbnails, for subsequent
+	sorting into new directories from an http localhost web server interface. 
+	
+	Use command-line argument 'full' to bypass thumbnail generation and deliver
+	full-size images in the web interface
+	
+	
+	
+	
+	NOTE
+	This script currently produces 750x500 px thumbnails from the image
+	
+
+'''
+
+def test(msg):
+	with open('TEST','w') as f:
+		f.write(str(msg))
+
+from bashcom import bashcom as bc
+import sys
+import os
+import re
+from PIL import Image
+import json
+
+installation_dir = os.path.dirname(os.path.realpath(__file__))
+
+print '#######\npicsort\n#######'
+
+
+def get_image_data2():
+	
+	''' Create directory picsort_thumbnails in cwd if it does not exist. 
+		Collect names of image files, create and save thumbnails in cwd. '''
+	
+	### Get current working directory (cwd) from user argument or subprocess call to pwd
+	
+	#print sys.argv
+	#sys.exit()
+	
+	#cwd = sys.argv[1].strip() if len(sys.argv) == 2 else bc('pwd').strip('\n')
+	cwd = bc('pwd').strip('\n')
+	if not ( os.path.exists(cwd) and os.path.isdir(cwd) ):
+		sys.exit('Supplied argument does not exist or is not a directory. Exiting...')
+		
+	### Get image files in cwd via regex
+	image_selector = re.compile('\.jpg|JPG|gif|GIF|png|PNG|tif|TIF|bmp|BMP$')
+	cwd_contents = bc('ls').split('\n')
+	image_files = [x for x in cwd_contents if re.search(image_selector,x)]
+	total_images = len(image_files)
+	if not total_images:
+		sys.exit('Found no image files in this directory. Exiting...')
+	
+	
+	if not 'full' in sys.argv:
+		#'''	
+		### Create picsort_thumbnails folder if it doesn't exist
+		thumbsize = 200,200
+		if not os.path.exists('%s/picsort_thumbnails' % cwd):
+			bc('mkdir %s/picsort_thumbnails' % cwd)
+		else:
+			print 'picsort_thumbnails directory already exists here. Continuing...'
+		picsort_thumbnails_contents = [x for x in bc('ls %s/picsort_thumbnails' % cwd).split('\n') if x]
+		#print picsort_thumbnails_contents
+	
+
+		### Create each image thumbnail if it does not exist
+		for i,image in enumerate(image_files):
+			
+			if image in picsort_thumbnails_contents:
+				print 'Found \"%s\" in picsort_thumbnails; skipping rewrite...' % image
+				continue
+			im = Image.open('%s/%s' % (cwd, image))
+			if im.size[0] > im.size[1]:
+				
+					
+				#
+				#	Set thumbsize here::::::::
+				#		
+						
+						
+				thumbsize = 750,500
+			else:
+				thumbsize = 500,750
+			
+
+			im.thumbnail(thumbsize)
+			im.save('%s/picsort_thumbnails/%s' % (cwd, image))	
+			print 'Created thumbnail %d of %d' % (i+1, total_images)
+		full = False
+	else:
+		full = True
+		#'''
+		
+		
+	cwd_dirs = [x for x in cwd_contents if os.path.isdir(x)]
+	
+	
+	image_data = {'cwd' : cwd, 'image_list' : image_files, 'cwd_dirs' : cwd_dirs, 'full' : full}
+	
+	with open('%s/image_data.json' % installation_dir, 'w') as f:
+		f.write(json.dumps(image_data))
+
+def get_image_data():
+	cwd = sys.argv[1].strip() if len(sys.argv) == 2 else bc('pwd').strip('\n')	# directory of picsort invocation
+	installation_dir = os.path.dirname(os.path.realpath(__file__))
+	
+	### Get image files in cwd via regex
+	image_selector = re.compile('\.jpg|JPG|gif|GIF|png|PNG|tif|TIF|bmp|BMP$')
+	cwd_contents = bc('ls').split('\n')
+	image_list = [x for x in cwd_contents if re.search(image_selector,x)]
+	total_images = len(image_list)
+	if not total_images:
+		sys.exit('Found no image files in this directory. Exiting...')
+	
+	
+	image_data = {'cwd':cwd, 'image_list':image_list}
+	with open('%s/image_data.json' % installation_dir, 'w') as f:
+		f.write(json.dumps(image_data))	
+
+def main():
+		
+	get_image_data2()
+
+	print 'Starting server...'
+	
+	import start
+	start.main()	
+
+if __name__ == '__main__':
+	main()

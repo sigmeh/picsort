@@ -1,0 +1,360 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset='utf-8'>		
+	<link rel='stylesheet' type='text/css' href='http://localhost:8000/static/picsort.css'></link>
+	<script type='text/javascript' src='http://localhost:8000/static/picsort.js'></script>
+	<script type='text/javascript' src='http://localhost:8000/static/jquery2.2.3.min.js'></script>
+	
+	<!--	
+	<script type='text/javascript' src='static/jquery2.2.3.js'></script>
+	<script type='text/javascript' src='http://localhost:8000/static/angular1.4.5.min.js'></script>
+	<script type='text/javascript' src='https://code.jquery.com/jquery-2.1.3.js'></script>
+	
+	-->
+	<title>picsort</title>
+	
+	<script>
+		function print(msg){$('#msgbox').append(String(msg));}	// print to screen
+		function con(msg){console.log(msg);} 			// log to console
+		
+		var selected_image = null;
+		var selected_dir = null;
+		var dir_number = 0;
+		var playing = null;
+		var total_images = null;
+		
+		function add_dir_num( cwd_dir_obj ){
+			dir_number++;
+			var dir_num_box = '<div class="dir_num_box inline" id="dir_'+String(dir_number)+'">'+String(dir_number)+'&nbsp;&nbsp;</div>';
+			cwd_dir_obj.prepend(dir_num_box);
+		}
+		
+		$(document).ready(function(){
+			$('.cwd_dirs').each(function(){
+				add_dir_num($(this));			
+			});
+			
+		});
+		
+		//		RECEIVE_DATA		
+		function receive_data( result ){		
+			//$('#msgbox').html('Data just executed:'+result.instructions+'...');
+			switch (result.instructions){
+				
+				case 'get_image':
+					var image = result.image;
+					$('#image_viewer').attr('src',image);
+					break;	
+								
+				case 'make_new_dir':
+					var new_dir_name = result.new_dir_name;
+					$('#new_dir_name').val('');
+					$('.cwd_dirs_placeholder').remove();
+					$('#dir_list').append('<div class="cwd_dirs"><div class="cwd_dirs_dir inline"></div></div>');
+					$('.cwd_dirs_dir').last().html(new_dir_name);
+					$('.cwd_dirs').last().attr('id', new_dir_name);
+					add_dir_num( $('.cwd_dirs_dir').last() );
+					break;
+					
+				case 'move_copy':	
+					var statement = 'Last action: ' + result.action + ' ' + result.image + ' -> ' + result.new_dir;
+					$('#msgbox').html(statement);						
+					if ( $('.image_list_item').last().hasClass('selected_image') ) {		// handle final image in list
+						if ( result.action == 'move' ) $('.selected_image').remove();		
+						return;
+					}
+									
+					$('.selected_image').next().addClass('selected_image' );						
+					result.action == 'move' && $('.selected_image').first().remove();
+					result.action == 'copy' && $('.selected_image').first().removeClass('selected_image');
+					update_image();
+					break;
+			}					
+		}
+		
+		//		POST_DATA		
+		function post_data( data ){		
+				$.ajax({
+					method	: 'post',
+					url		: 'picsort.py',
+					data 	: {'package' : JSON.stringify(data)},
+					success	: function(result){
+						receive_data( JSON.parse(result).package );
+					}
+				});
+		}
+		
+		//		GET_IMAGE
+		function get_image( image_name ){
+			data = {
+				'instructions'	: 'get_image',
+				'image_name'	: image_name
+			}
+			post_data(data);
+		}
+		
+		//		UPDATE_IMAGE
+		function update_image(){
+			selected_image != $('.selected_image').html() ? get_image( $('.selected_image').html() ) : {};
+			selected_image = $('.selected_image').html();
+			$('#image_name').html(selected_image);
+			
+			//count images and alter total if necessary
+			total_images = $('.image_list_item').length;
+			$('#total_images').html(total_images);
+			
+		}
+		
+		//		MOVE_COPY
+		function move_copy(dir_num){
+			var action;
+			$('.action').each(function(){
+				this.checked ? action = this.id : {};
+			});
+			
+			$('.selected_dir').removeClass('selected_dir');
+			$('#dir_'+dir_num).parent().addClass('selected_dir');
+			
+			
+			//print(  $('#dir_'+dir_num).next().html().trim() );
+			
+			//return;
+			
+			data = {
+				'instructions' 	: 'move_copy',
+				'action' 		: action, 
+				'image'			: $('.selected_image').html(), 
+				'new_dir'		: $('#dir_'+dir_num).next().html().trim() 
+			}
+			
+			data.image == null || data.new_dir == null ? $('#msgbox').html('image/dir selection error') : post_data(data);
+			/*
+			if ( data.image == null || data.new_dir == null ){
+				$('#msgbox').html('Need to select both image and dir');
+				return;
+			}
+			
+			post_data( data )
+			*/
+		}
+		
+		//		CWD_DIRS EVENT HANDLERS
+		$(document).on({
+			'click' : function(){
+				$('.cwd_dirs').removeClass('hovered_dir selected_dir');
+				$(this).addClass('selected_dir');
+			}, 
+			'mouseenter' : function(){
+				! $(this).hasClass('selected_dir') ? $(this).addClass('hovered_dir') : $(this).addClass('selected_hovered_dir') ; 
+			},
+			'mouseleave' : function(){
+				$('.cwd_dirs').removeClass('hovered_dir selected_hovered_dir');
+			}
+		}, '.cwd_dirs');
+		
+		//		IMAGE_LIST_ITEM EVENT HANDLERS
+		$(document).on({
+			'click' : function(e){
+				$('.image_list_item').removeClass('selected_image');
+				$(this).addClass('selected_image');
+				update_image();	
+			},
+			'mouseenter' : function(){
+				! $(this).hasClass('selected_image') ? $(this).addClass('hovered_image') : {} ;
+			},
+			'mouseleave' : function(){
+				$('.image_list_item').removeClass('hovered_image');
+			}
+		},'.image_list_item');
+
+		//		MAKE_NEW_DIR
+		$(document).on({
+			'click' : function(){
+				var new_dir_name = $('#new_dir_name').val();
+				if (! new_dir_name) return;
+				
+				var data = {
+					'instructions':'make_new_dir',
+					'new_dir_name':new_dir_name };
+				
+				post_data( data );
+			}
+		},'#new_dir_button');
+		
+		//		SLIDESHOW
+		$(document).on({
+			'click' : function(){
+				function play(){
+					playing = setInterval(function(){
+						$('.selected_image').next().addClass('selected_image').prev().removeClass('selected_image');
+						if ( $('.selected_image')[0].offsetTop > ( $('#image_list')[0].offsetTop + $('#image_list').height() - $('.selected_image').height()) ){
+							$('#image_list')[0].scrollTop += $('.image_list_item').height(); 
+						}
+						update_image();
+					},150);
+				}
+				
+				function stop(){
+					clearInterval(playing);
+					playing = null;
+				}
+				playing ? stop() : play();
+				
+			}
+		},'#slideshow');
+		
+			
+		//		KEYDOWN EVENT HANDLERS		(arrow up/down + numbers)
+		$(document).on('keydown', function(e){
+			
+			switch(e.key){								// Toggle action (move/copy == m/c) by checking appropriate radio button	
+				case 'm':
+					$('#move').prop('checked',true);
+					break;				
+				case 'c':
+					$('#copy').prop('checked',true);
+					break;
+			}
+			
+			! isNaN(e.key) ? move_copy(e.key) : {}; 	// Handle numerical input as destination folder for selected image
+			
+			// 	Up/down arrows change .selected_image (highlighted text and actual image) 
+			//	Also: automates #image_list scroll to ensure .selected_image is always visible
+			
+			switch(e.which){
+				
+				case 40:	// down arrow	
+					e.preventDefault();		
+					$('.selected_image').next().addClass('selected_image').prev().removeClass('selected_image');
+					if ( $('.selected_image')[0].offsetTop > ( $('#image_list')[0].offsetTop + $('#image_list').height() - $('.selected_image').height()) ){
+						$('#image_list')[0].scrollTop += $('.image_list_item').height(); 
+					}
+					break;
+				
+				case 38:	//up arrow
+					e.preventDefault();
+					$('.selected_image').prev().addClass('selected_image').next().removeClass('selected_image');
+					if ( $('.selected_image')[0].offsetTop < $('#image_list')[0].offsetTop + $('#image_list')[0].scrollTop ){
+						$('#image_list')[0].scrollTop -= $('.image_list_item').height();
+					}	
+					break;	
+			}
+			update_image();			
+		});
+		
+
+	</script>
+</head>
+<body>
+	<div id='container'>	
+		<b>picsort</b>
+		<br>
+		Sorting from <b>{{cwd}}</b>
+		<br>
+		<div class='inline'>
+			<div id='image_list' class='border'>{{image_list}}</div>
+			<br>
+			total images: <div id='total_images'>{{total_images}}</div>
+		</div>
+		
+		<div class='inline top'>
+			<img id='image_viewer' class='border pad2'/><br>
+			image name: <b><span id='image_name'> ### </span></b>
+			<br><br>
+			<div class='border pad2'>
+				move<input type='radio' id='move' name='action' class='action' checked/>
+				copy<input type='radio' id='copy' name='action' class='action'/>
+			</div>
+			<br>
+			<b>dir_list</b>
+			<div id='dir_list' class='border pad2'> {{dir_list}} </div>
+
+			<button id='new_dir_button'>Make new dir:</button>
+			<textarea id='new_dir_name'></textarea>
+			<br>
+			<button id='slideshow'>slideshow</button>
+		
+			
+		</div>
+		
+		
+	</div>
+
+
+	
+		
+	<!--<div id='msgbox'>jquery not loaded</div>-->
+	<div id='msgbox'></div>
+	
+	<style>
+		.dir_num_box{
+			
+		}
+		#new_dir_name{
+			height:16px;
+			width:200px;
+			resize:none;
+		}
+		.selected_hovered_dir{
+			background-color:rgb(216,233,248);
+		}
+		.selected_dir{
+			background-color:rgb(255,149,121);
+		}
+		.cwd_dirs{
+			cursor:pointer;
+			
+		}
+		.hovered_dir{
+			background-color:rgb(255,255,207);
+		}
+		.pad2{
+			padding:2px;
+		}
+		.top{
+			vertical-align:top;
+		}
+		.inline{
+			display:inline-block;
+		}
+		
+		#image_viewer{
+			/*
+			height:300px;
+			width:450px;
+			*/
+			height:500px;
+			width:750px;
+			vertical-align:top;
+			display:inline-block;	
+		}
+		#image_list{
+			padding:2px;
+			display:inline-block;
+			cursor:pointer;
+			height:800px;
+			overflow:scroll;
+		}
+		
+		.image_list_item:focus{
+			
+		}
+		.hovered_image{
+			background-color:rgb(255,255,207);
+		}
+		.selected_image{
+			background-color:rgb(164,253,201);
+		}
+		#msgbox{
+			color:red;
+		}
+		
+		.border{
+			border-style:solid;
+			border-color:black;
+			border-width:1px;
+		}
+	</style>
+</body>
+</html>

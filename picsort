@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+import os
+import re
+import json
+from bashcom import bashcom as bc
+import generate_thumbnails
+
+def test(msg):
+	with open('TEST','a') as f:
+		f.write(str(msg)+'\n')
+
+installation_dir = os.path.dirname(os.path.realpath(__file__))
+
+def main():
+	''' main function to load picsort app as html document into browser '''
+	with open('%s/picsort.html' % installation_dir, 'r') as f:
+		doc = f.read()
+	
+	#	retrieve and load image data into {{image_list}} placeholder of html document
+	with open('image_data.json','r') as f:
+		image_data = json.loads(f.read())
+	cwd = image_data['cwd']
+	image_list = image_data['image_list']
+	
+	'''
+	image_selector = re.compile('\.jpg|JPG|gif|GIF|png|PNG|tif|TIF|bmp|BMP$')
+	cwd_contents = bc('ls %s' % cwd).split('\n')
+	image_list = [x for x in cwd_contents if  re.search(image_selector,x)]
+	'''
+
+	image_list = ['<div class="image_list_item" id="image%d">%s</div>' % (i,x) for i,x in enumerate(image_list) ]
+	doc = doc.replace('{{image_list}}', '\n'.join(image_list) )
+	doc = doc.replace('{{total_images}}', str(len(image_list)))
+	
+	
+	dir_list = [x for x in bc('ls %s' % cwd).split('\n') if os.path.isdir('%s/%s' % (cwd, x) ) and x != 'picsort_thumbnails' and x]
+	cwd_dirs = [ ('<div class="cwd_dirs"><div class="cwd_dirs_dir inline">%s</div></div>' % x) for x in dir_list if dir_list ]
+	doc = doc.replace('{{dir_list}}', '%s' % '\n'.join(cwd_dirs) if cwd_dirs else '<div class="cwd_dirs_placeholder">###</div>')
+	
+	doc = doc.replace('{{cwd}}',image_data['cwd'])
+	
+	print 'content-type:text/html\n'
+	print doc
+	
+	
+	#bc('python generate_thumbnails.py &')
+	
+if __name__ == '__main__':
+	main()
